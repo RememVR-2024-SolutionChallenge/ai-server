@@ -6,6 +6,9 @@ load_dotenv()
 
 mySecret = os.environ.get('MySecret')
 
+SERVER_IP = os.getenv("SERVER_IP")
+SERVER_PORT = os.getenv("SERVER_PORT")
+
 current_date = datetime.date.today()
 FORMAT_DATE = current_date.strftime("%Y-%m-%d")
 
