@@ -1,13 +1,21 @@
+import asyncio
+import io
+import os
+import subprocess
+import time
+from datetime import datetime
+from subprocess import Popen, PIPE
+from typing import Dict, List, Optional
+
+import httpx
+from PIL import Image
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from subprocess import Popen, PIPE
-from pydantic import BaseModel
-import io
 import uvicorn
-from datetime import datetime
-import time
-from typing import List, Optional
-from PIL import Image
+
+from config import SERVER_IP, SERVER_PORT
+from logger import logger
+from pydantic import BaseModel
 
 
 app = FastAPI(
@@ -20,9 +28,12 @@ app = FastAPI(
 )
 
 
-########## Status Management ##########
+########## Management ##########
 IS_BUSY = False
 
+PREPROCESS_URL = f"http://{SERVER_IP}:{SERVER_PORT}/api/preprocess"
+MOBILENERF_URL = f"http://{SERVER_IP}:{SERVER_PORT}/api/mobilenerf"
+POSTPROCESS_URL = f"http://{SERVER_IP}:{SERVER_PORT}/api/postprocess"
 
 ########## @@ APIHandler ##########
 
