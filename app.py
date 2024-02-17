@@ -102,7 +102,26 @@ async def preprocess(data: Dict):
         logger.error(f"Preprocessing failed: {e.stderr}")
         return {"detail": "Preprocessing failed", "error": e.stderr}, 400
     
-    
+
+@app.post("/api/mobilenerf")
+async def mobilenerf(data: Dict):
+    base_dir = data.get("base_dir")
+    logger.info("Mobilenerf training started")
+    await asyncio.sleep(3)  # 3초 대기
+    logger.info("Mobilenerf training completed successfully.")
+    return {"message": "Mobilenerf training completed successfully."}
+
+
+@app.post("/api/postprocess")
+async def postprocess(data: Dict):
+    base_dir = data.get("base_dir")
+    logger.info("Postprocessing started")
+    await asyncio.sleep(3)  # 3초 대기
+    logger.info("Postprocessing completed successfully.")
+    return {"message": "Postprocessing completed successfully."}
+
+
+
 ########## Training Utilities ##########
     
 def run_script(script_name: str) -> Optional[str]:
