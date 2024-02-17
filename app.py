@@ -51,23 +51,58 @@ async def checkStatus():
             content={"status": "IDLE"}
         )
     
-@app.post("/train-scene")
-async def train_scene():
-    scripts = ["train_stage1.py", "train_stage2.py", "postprocess.py"]
-    for script in scripts:
-        error_message = run_script(script)
-        if error_message:
-            return {"success": False, "message": f"Failed at {script}: {error_message}"}
     
-    output_folder = "/data/output"
-    bucket_name = "your-bucket-name"
-    upload_success = upload_files_to_gcs(bucket_name, output_folder)
-    if upload_success:
-        return {"success": True, "message": "All stages completed successfully, files uploaded to GCS."}
-    else:
-        return {"success": False, "message": "Failed to upload files to GCS."}
+@app.post("/api/train-scene")
+async def train_scene():
+    base_dir = get_unique_folder_name()
+    input_dir = f"{base_dir}/input"
+
+    os.makedirs(base_dir, exist_ok=True)
+    os.makedirs(input_dir, exist_ok=True)
+
+    data = {"base_dir": base_dir}
+
+    ##TODO: Cloud Storage로부터 받은 Video 불러오기 -> input_dir에 저장
+    ##TODO: EX. /app/data/2024-02-17-06-22-39/video.mov
+
+    async with httpx.AsyncClient() as client:
+        # Preprocess 단계 호출
+        preprocess_response = await client.post(PREPROCESS_URL, json=data)
+        if preprocess_response.status_code != 200:
+            raise HTTPException(status_code=preprocess_response.status_code, detail="Preprocess step failed")
+
+        # Train 단계 호출
+        mobilenerf_response = await client.post(MOBILENERF_URL, json=data)
+        if mobilenerf_response.status_code != 200:
+            raise HTTPException(status_code=mobilenerf_response.status_code, detail="Mobilenerf step failed")
+
+        # Postprocess 단계 호출
+        postprocess_response = await client.post(POSTPROCESS_URL, json=data)
+        if postprocess_response.status_code != 200:
+            raise HTTPException(status_code=postprocess_response.status_code, detail="Postprocess step failed")
+
+    return {"message": "All stages completed successfully, files are ready in " + base_dir}
 
 
+@app.post("/api/preprocess")
+async def preprocess(data: Dict):
+    base_dir = data.get("base_dir")
+    input_dir = f"{base_dir}/input"
+    preprocessed_dir = f"{base_dir}/preprocessed_input"
+    os.makedirs(preprocessed_dir, exist_ok=True)
+
+    logger.info("Preprocessing started")
+    command = f"ns-process-data video --data \"{input_dir}/video.mov\" --output-dir \"{preprocessed_dir}\""
+
+    try:
+        process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        logger.info("Preprocessing completed successfully.")
+        return {"message": "Preprocessing completed successfully."}
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Preprocessing failed: {e.stderr}")
+        return {"detail": "Preprocessing failed", "error": e.stderr}, 400
+    
+    
 ########## Training Utilities ##########
     
 def run_script(script_name: str) -> Optional[str]:
