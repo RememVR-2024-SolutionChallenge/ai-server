@@ -5,16 +5,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 mySecret = os.environ.get('MySecret')
-
 SERVER_IP = os.getenv("SERVER_IP")
 SERVER_PORT = os.getenv("SERVER_PORT")
-
-current_date = datetime.date.today()
-FORMAT_DATE = current_date.strftime("%Y-%m-%d")
-
-API_BASE_URL = os.environ.get('API_BASE_URL')
 LOG_PATH = os.environ.get('LOG_PATH')
-PRESET_DIR = os.environ.get('PRESET_DIR')
 GCP_CREDENTIAL = os.environ.get('GCP_CREDENTIAL')
-DATA_PATH = os.environ.get('DATA_PATH')
-CHECKPOINT_PATH = os.environ.get('CHECKPOINT_PATH')
+
+BASE_DIR_NAME = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+BASE_DIR = os.path.join(os.environ.get('DATA_PATH', '.'), BASE_DIR_NAME)
+os.environ['BASE_DIR'] = BASE_DIR
