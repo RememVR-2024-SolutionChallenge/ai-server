@@ -42,8 +42,8 @@ from multiprocessing.pool import ThreadPool
 # fulllivingroom kitchencounter kitchenlego officebonsai
 
 scene_type = "real360"
-object_name = "gardenvase"
-scene_dir = "datasets/nerf_synthetic/"+object_name
+#object_name = "gardenvase"
+#scene_dir = "datasets/nerf_synthetic/"+object_name
 
 if scene_type=="forwardfacing":
   white_bkgd = False

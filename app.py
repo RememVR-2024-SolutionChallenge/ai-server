@@ -54,30 +54,34 @@ async def checkStatus():
     
 @app.post("/api/train-scene")
 async def train_scene():
-    base_dir = get_unique_folder_name()
+    base_dir_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    base_dir = os.path.join(os.getcwd(), 'data', base_dir_name)
     input_dir = f"{base_dir}/input"
-
     os.makedirs(base_dir, exist_ok=True)
     os.makedirs(input_dir, exist_ok=True)
 
-    data = {"base_dir": base_dir}
+    os.environ['BASE_DIR'] = base_dir
+    env = os.environ.copy()
+    
+    base_dir_data = {"base_dir": base_dir}
+    env_data = {"env" : env}
 
     ##TODO: Cloud Storage로부터 받은 Video 불러오기 -> input_dir에 저장
     ##TODO: EX. /app/data/2024-02-17-06-22-39/video.mov
 
     async with httpx.AsyncClient() as client:
         # Preprocess 단계 호출
-        preprocess_response = await client.post(PREPROCESS_URL, json=data)
+        preprocess_response = await client.post(PREPROCESS_URL, json=base_dir_data)
         if preprocess_response.status_code != 200:
             raise HTTPException(status_code=preprocess_response.status_code, detail="Preprocess step failed")
 
         # Train 단계 호출
-        mobilenerf_response = await client.post(MOBILENERF_URL, json=data)
+        mobilenerf_response = await client.post(MOBILENERF_URL, json=env_data)
         if mobilenerf_response.status_code != 200:
             raise HTTPException(status_code=mobilenerf_response.status_code, detail="Mobilenerf step failed")
 
         # Postprocess 단계 호출
-        postprocess_response = await client.post(POSTPROCESS_URL, json=data)
+        postprocess_response = await client.post(POSTPROCESS_URL, json=env_data)
         if postprocess_response.status_code != 200:
             raise HTTPException(status_code=postprocess_response.status_code, detail="Postprocess step failed")
 
@@ -105,8 +109,9 @@ async def preprocess(data: Dict):
 
 @app.post("/api/mobilenerf")
 async def mobilenerf(data: Dict):
-    base_dir = data.get("base_dir")
+    env = data.get("env")
     logger.info("Mobilenerf training started")
+    subprocess.run(['python', 'train.py'], env=env)
     await asyncio.sleep(3)  # 3초 대기
     logger.info("Mobilenerf training completed successfully.")
     return {"message": "Mobilenerf training completed successfully."}
@@ -133,3 +138,8 @@ def run_script(script_name: str) -> Optional[str]:
         return None  
     except Exception as e:
         return str(e)
+    
+def get_unique_folder_name():
+    now = datetime.now()
+    dir_name = now.strftime("%Y-%m-%d-%H-%M-%S")
+    return f"/data/{dir_name}"

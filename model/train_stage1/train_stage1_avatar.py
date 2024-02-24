@@ -38,8 +38,8 @@ from multiprocessing.pool import ThreadPool
 # test: chair drums ficus hotdog lego materials mic ship
 
 scene_type = "synthetic"
-object_name = "chair"
-scene_dir = "datasets/nerf_synthetic/"+object_name
+#object_name = "chair"
+#scene_dir = "datasets/nerf_synthetic/"+object_name
 
 if scene_type=="synthetic":
   white_bkgd = True
@@ -238,58 +238,6 @@ if scene_type=="synthetic":
   def inverse_taper_coord(p):
     return p
 
-elif scene_type=="forwardfacing":
-  scene_grid_taper = 1.25
-  scene_grid_zstart = 25.0
-  scene_grid_zend = 1.0
-  scene_grid_scale = 0.7
-  grid_min = np.array([-scene_grid_scale, -scene_grid_scale,  0])
-  grid_max = np.array([ scene_grid_scale,  scene_grid_scale,  1])
-  point_grid_size = 128
-
-  def get_taper_coord(p):
-    pz = np.maximum(-p[..., 2:3],1e-10)
-    px = p[..., 0:1]/(pz*scene_grid_taper)
-    py = p[..., 1:2]/(pz*scene_grid_taper)
-    pz = (np.log(pz) - np.log(scene_grid_zend))/(np.log(scene_grid_zstart) - np.log(scene_grid_zend))
-    return np.concatenate([px,py,pz],axis=-1)
-  def inverse_taper_coord(p):
-    pz = np.exp( p[..., 2:3] * \
-          (np.log(scene_grid_zstart) - np.log(scene_grid_zend)) + \
-          np.log(scene_grid_zend) )
-    px = p[..., 0:1]*(pz*scene_grid_taper)
-    py = p[..., 1:2]*(pz*scene_grid_taper)
-    pz = -pz
-    return np.concatenate([px,py,pz],axis=-1)
-
-elif scene_type=="real360":
-  scene_grid_zmax = 16.0
-  if object_name == "gardenvase":
-    scene_grid_zmax = 9.0
-  grid_min = np.array([-1, -1, -1])
-  grid_max = np.array([ 1,  1,  1])
-  point_grid_size = 128
-
-  def get_taper_coord(p):
-    return p
-  def inverse_taper_coord(p):
-    return p
-
-  #approximate solution of e^x = ax+b
-  #(np.exp( x ) + (x-1)) / x = scene_grid_zmax
-  #np.exp( x ) - scene_grid_zmax*x + (x-1) = 0
-  scene_grid_zcc = -1
-  for i in range(10000):
-    j = numpy.log(scene_grid_zmax)+i/1000.0
-    if numpy.exp(j) - scene_grid_zmax*j + (j-1) >0:
-      scene_grid_zcc = j
-      break
-  if scene_grid_zcc<0:
-    print("ERROR: approximate solution of e^x = ax+b failed")
-    1/0
-
-
-
 grid_dtype = np.float32
 
 #plane parameter grid
@@ -395,176 +343,6 @@ if scene_type=="synthetic":
 
     return grid_indices, grid_masks
 
-elif scene_type=="forwardfacing":
-
-  def gridcell_from_rays(rays, acc_grid, keep_num, threshold):
-    ray_origins = rays[0]
-    ray_directions = rays[1]
-
-    dtype = ray_origins.dtype
-    batch_shape = ray_origins.shape[:-1]
-    small_step = 1e-5
-    epsilon = 1e-10
-
-    ox = ray_origins[..., 0:1]
-    oy = ray_origins[..., 1:2]
-    oz = ray_origins[..., 2:3]
-
-    dx = ray_directions[..., 0:1]
-    dy = ray_directions[..., 1:2]
-    dz = ray_directions[..., 2:3]
-
-
-    layers = np.arange(point_grid_size+1,dtype=dtype)/point_grid_size #[0,1]
-    layers = np.reshape(layers, [1]*len(batch_shape)+[point_grid_size+1])
-    layers = np.broadcast_to(layers, list(batch_shape)+[point_grid_size+1])
-
-
-    #z planes
-    #z = Zlayers
-    #dz*t + oz = Zlayers
-    Zlayers = -np.exp( layers * \
-          (np.log(scene_grid_zstart) - np.log(scene_grid_zend)) + \
-          np.log(scene_grid_zend) )
-    dzm = (np.abs(dz)<epsilon).astype(dtype)
-    dz = dz+dzm
-    tz = (Zlayers-oz)/dz
-    tz = tz*(1-dzm) + 1000*dzm
-
-    #x planes
-    #x/z = Xlayers*scene_grid_taper = Xlayers_
-    #(dx*t + ox)/(dz*t + oz) = Xlayers_
-    #t = (oz*Xlayers_ - ox)/(dx - Xlayers_*dz)
-    Xlayers_ = (layers*(grid_max[0]-grid_min[0])+grid_min[0])*scene_grid_taper
-    dxx = dx - Xlayers_*dz
-    dxm = (np.abs(dxx)<epsilon).astype(dtype)
-    dxx = dxx+dxm
-    tx = (oz*Xlayers_ - ox)/dxx
-    tx = tx*(1-dxm) + 1000*dxm
-
-    #y planes
-    Ylayers_ = (layers*(grid_max[1]-grid_min[1])+grid_min[1])*scene_grid_taper
-    dyy = dy - Ylayers_*dz
-    dym = (np.abs(dyy)<epsilon).astype(dtype)
-    dyy = dyy+dym
-    ty = (oz*Ylayers_ - oy)/dyy
-    ty = ty*(1-dym) + 1000*dym
-
-
-    txyz = np.concatenate([tx, ty, tz], axis=-1)
-    txyzm = (txyz<=0).astype(dtype)
-    txyz = txyz*(1-txyzm) + 1000*txyzm
-
-
-    #compute mask from acc_grid
-    txyz = txyz + small_step
-    world_positions = ray_origins[..., None, :] + \
-                      ray_directions[..., None, :] * txyz[..., None]
-    taper_positions = get_taper_coord(world_positions)
-    acc_grid_masks = get_acc_grid_masks(taper_positions, acc_grid)
-    #remove empty cells for faster training
-    txyzm = (acc_grid_masks<threshold).astype(dtype)
-    txyz = txyz*(1-txyzm) + 1000*txyzm
-
-    txyz = np.sort(txyz, axis=-1)
-    txyz = txyz[..., :keep_num]
-
-
-    world_positions = ray_origins[..., None, :] + \
-                      ray_directions[..., None, :] * txyz[..., None]
-    taper_positions = get_taper_coord(world_positions)
-
-
-    grid_positions = (taper_positions - grid_min) * \
-                      (point_grid_size / (grid_max - grid_min) )
-
-    grid_masks = (grid_positions[..., 0]>=1) & (grid_positions[..., 0]<point_grid_size-1) \
-                & (grid_positions[..., 1]>=1) & (grid_positions[..., 1]<point_grid_size-1) \
-                & (grid_positions[..., 2]>=1) & (grid_positions[..., 2]<point_grid_size-1)
-
-    grid_positions = grid_positions*grid_masks[..., None] \
-              + np.logical_not(grid_masks[..., None]) #min=1,max=point_grid_size-2
-    grid_indices = grid_positions.astype(np.int32)
-
-    return grid_indices, grid_masks
-
-elif scene_type=="real360":
-
-  def gridcell_from_rays(rays, acc_grid, keep_num, threshold): #same as synthetic, except near clip
-    ray_origins = rays[0]
-    ray_directions = rays[1]
-
-    dtype = ray_origins.dtype
-    batch_shape = ray_origins.shape[:-1]
-    small_step = 1e-5
-    epsilon = 1e-5
-
-    ox = ray_origins[..., 0:1]
-    oy = ray_origins[..., 1:2]
-    oz = ray_origins[..., 2:3]
-
-    dx = ray_directions[..., 0:1]
-    dy = ray_directions[..., 1:2]
-    dz = ray_directions[..., 2:3]
-
-    dxm = (np.abs(dx)<epsilon).astype(dtype)
-    dym = (np.abs(dy)<epsilon).astype(dtype)
-    dzm = (np.abs(dz)<epsilon).astype(dtype)
-
-    #avoid zero div
-    dx = dx+dxm
-    dy = dy+dym
-    dz = dz+dzm
-
-    layers = np.arange(point_grid_size+1,dtype=dtype)/point_grid_size #[0,1]
-    layers = np.reshape(layers, [1]*len(batch_shape)+[point_grid_size+1])
-    layers = np.broadcast_to(layers, list(batch_shape)+[point_grid_size+1])
-
-    tx = ((layers*(grid_max[0]-grid_min[0])+grid_min[0])-ox)/dx
-    ty = ((layers*(grid_max[1]-grid_min[1])+grid_min[1])-oy)/dy
-    tz = ((layers*(grid_max[2]-grid_min[2])+grid_min[2])-oz)/dz
-
-    tx = tx*(1-dxm) + 1000*dxm
-    ty = ty*(1-dym) + 1000*dym
-    tz = tz*(1-dzm) + 1000*dzm
-
-    txyz = np.concatenate([tx, ty, tz], axis=-1)
-    txyzm = (txyz<=0.2).astype(dtype)
-    txyz = txyz*(1-txyzm) + 1000*txyzm
-
-
-    #compute mask from acc_grid
-    txyz = txyz + small_step
-    world_positions = ray_origins[..., None, :] + \
-                      ray_directions[..., None, :] * txyz[..., None]
-    acc_grid_masks = get_acc_grid_masks(world_positions, acc_grid)
-    #remove empty cells for faster training
-    txyzm = (acc_grid_masks<threshold).astype(dtype)
-    txyz = txyz*(1-txyzm) + 1000*txyzm
-
-    txyz = np.sort(txyz, axis=-1)
-    txyz = txyz[..., :keep_num]
-
-
-    world_positions = ray_origins[..., None, :] + \
-                      ray_directions[..., None, :] * txyz[..., None]
-
-
-    grid_positions = (world_positions - grid_min) * \
-                      (point_grid_size / (grid_max - grid_min) )
-
-    grid_masks = (grid_positions[..., 0]>=1) & (grid_positions[..., 0]<point_grid_size-1) \
-                & (grid_positions[..., 1]>=1) & (grid_positions[..., 1]<point_grid_size-1) \
-                & (grid_positions[..., 2]>=1) & (grid_positions[..., 2]<point_grid_size-1)
-
-    grid_positions = grid_positions*grid_masks[..., None] \
-              + np.logical_not(grid_masks[..., None]) #min=1,max=point_grid_size-2
-    grid_indices = grid_positions.astype(np.int32)
-
-    return grid_indices, grid_masks
-
-
-
 
 #get barycentric coordinates
 #P = (p1-p3) * a + (p2-p3) * b + p3
@@ -623,9 +401,6 @@ def get_barycentric(p1,p2,p3,O,d):
 
   mask = (a>=0) & (b>=0) & (c>=0) & np.logical_not(denominator_mask)
   return a,b,c,mask
-
-
-
 
 cell_size_x = (grid_max[0] - grid_min[0])/point_grid_size
 half_cell_size_x = cell_size_x/2
@@ -1023,9 +798,10 @@ def compute_box_intersection(rays):
   taper_scales = (layers_+1)/layers * world_masks
   taper_positions = world_positions * taper_scales[..., None]
   return taper_positions, world_masks
+
 #%% --------------------------------------------------------------------------------
-# ## MLP setup
-#%%
+# MLP setup
+#%% --------------------------------------------------------------------------------
 num_bottleneck_features = 8
 
 
