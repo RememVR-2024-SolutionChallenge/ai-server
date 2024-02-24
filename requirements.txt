@@ -10,3 +10,4 @@ python-dotenv==1.0.0
 httpx==0.24.1
 google-cloud-firestore==2.14.0
 google-cloud-storage==2.14.0
+requests==2.31.0
