@@ -36,4 +36,8 @@ docker run -d \
    MY_CONTAINER_NAME
 ```
 
-## 🔖 References 
+## 🔖 References
+* MobileNeRF: Exploiting the Polygon Rasterization Pipeline for Efficient Neural Field Rendering on Mobile Architectures (Apache-2.0 license)
+* MobileNeRF + WebXR
+* HumanNeRF: Free-viewpoint Rendering of Moving Peoplefrom Monocular Video (MIT License)
+* Draco (Apache-2.0 license)
