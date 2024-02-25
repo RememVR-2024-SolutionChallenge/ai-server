@@ -1,8 +1,5 @@
 from google.cloud import storage
-# import os
-
-# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp"
-# BUCKET = 'bucket'
+from config import BUCKET
 
 # !!USAGE BELOW!!
 # file = download_from_storage("test/1.jpg")

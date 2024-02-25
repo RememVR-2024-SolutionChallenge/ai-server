@@ -1,9 +1,5 @@
 from google.cloud import firestore
-# import os
-
-# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp"
-# REQUEST_COLLECTION = "collection"
-# VR_RESOURCE_COLLECTION = "collection"
+from config import VR_RESOURCE_COLLECTION, REQUEST_COLLECTION
 
 # Insert generated VR resource(avatar, scene) data,
 # when the task successfully finished.
