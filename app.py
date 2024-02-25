@@ -14,6 +14,15 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from common.scheduler_utils import trigger_scheduler
+from common.storage_utils import download_from_storage, upload_to_storage
+from common.firestore_utils import (
+    get_request, 
+    update_request_status_completed, 
+    update_request_status_failed, 
+    update_request_status_processing,
+    insert_vr_resource
+)
+
 from config import SERVER_IP, SERVER_PORT
 from logger import logger
 from pydantic import BaseModel
@@ -53,10 +62,22 @@ async def health_check():
         )
     
     
-@app.post("/api/train-scene")
-async def train_scene():
+@app.post("/api/train-scene/{doc_id}")
+async def train_scene(doc_id: str):
     global IS_BUSY
     IS_BUSY = True
+
+    request_data = get_request(doc_id)
+    if not request_data:
+        IS_BUSY = False
+        raise HTTPException(status_code=404, detail="Request data not found")
+
+    groupId = request_data.get('groupId')
+    title = request_data.get('title')
+    videoPath = request_data.get('videoPath')
+    resourceType = request_data.get('type')
+
+    update_request_status_processing(doc_id)
 
     base_dir_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     base_dir = os.path.join(os.getcwd(), 'data', base_dir_name)
@@ -70,29 +91,68 @@ async def train_scene():
     base_dir_data = {"base_dir": base_dir}
     env_data = {"env" : env}
 
-    ##TODO: Cloud Storage로부터 받은 Video 불러오기 -> input_dir에 저장
-    ##TODO: EX. /app/data/2024-02-17-06-22-39/video.mov
+    try:
+        video_file_bytes = download_from_storage(videoPath)
+        saved_file_path = save_bytes_to_file(video_file_bytes, "video.mov", input_dir)
+    except FileNotFoundError:
+        logger.error("The specified video file was not found in Cloud Storage.")
+        update_request_status_failed(doc_id)
+        raise HTTPException(status_code=404, detail="Video file not found.")
+        
+    except PermissionError:
+        logger.error("Permission denied while accessing the video file.")
+        update_request_status_failed(doc_id)
+        raise HTTPException(status_code=403, detail="Permission denied.")
+        
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {str(e)}")
+        update_request_status_failed(doc_id)
+        raise HTTPException(status_code=400, detail="Failed to process the video file due to an unexpected error.")
+
 
     try:
         async with httpx.AsyncClient() as client:
-            # Preprocess 단계 호출
             preprocess_response = await client.post(PREPROCESS_URL, json=base_dir_data)
             if preprocess_response.status_code != 200:
                 raise HTTPException(status_code=preprocess_response.status_code, detail="Preprocess step failed")
 
-            # Train 단계 호출
             mobilenerf_response = await client.post(MOBILENERF_URL, json=env_data)
             if mobilenerf_response.status_code != 200:
                 raise HTTPException(status_code=mobilenerf_response.status_code, detail="Mobilenerf step failed")
 
-            # Postprocess 단계 호출
             postprocess_response = await client.post(POSTPROCESS_URL, json=env_data)
             if postprocess_response.status_code != 200:
                 raise HTTPException(status_code=postprocess_response.status_code, detail="Postprocess step failed")
+       
+        output_file_path = f"{base_dir}/output/"
+        try: 
+            insert_vr_resource(doc_id, title, resourceType, groupId, output_file_path)
+        except Exception as e:
+            logger.error(f"Error inserting VR resource: {str(e)}")
+            update_request_status_failed(doc_id)
+            raise HTTPException(status_code=500, detail="Failed to insert VR resource into Firestore.")
+
+        try:
+            for root, dirs, files in os.walk(output_file_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    with open(file_path, 'rb') as file_data:
+                        data = file_data.read()
+                    content_type = get_content_type(file)
+                    storage_file_path = os.path.join("test", file) 
+                    upload_to_storage(storage_file_path, data, content_type)
+                    
+            update_request_status_completed(doc_id)
+        except Exception as e:
+            logger.error(f"Error uploading files: {str(e)}")
+            update_request_status_failed(doc_id)
+            raise HTTPException(status_code=500, detail="Failed to upload files to Cloud Storage.")
+
 
     except HTTPException as http_exc:
         logger.error(f"Error during pipeline execution: {http_exc.detail}")
-        raise HTTPException(status_code=http_exc.status_code, detail=http_exc.detail)
+        update_request_status_failed(doc_id)
+        # raise HTTPException(status_code=http_exc.status_code, detail=http_exc.detail)
 
     finally:
         IS_BUSY = False
@@ -156,3 +216,19 @@ def get_unique_folder_name():
     now = datetime.now()
     dir_name = now.strftime("%Y-%m-%d-%H-%M-%S")
     return f"/data/{dir_name}"
+
+def save_bytes_to_file(file_bytes: bytes, file_name: str, save_path: str):
+    save_file_path = os.path.join(save_path, file_name)
+    os.makedirs(os.path.dirname(save_file_path), exist_ok=True)
+    with open(save_file_path, 'wb') as file_to_save:
+        file_to_save.write(file_bytes)
+    return save_file_path
+
+def get_content_type(file_name: str):
+    _, ext = os.path.splitext(file_name)
+    return {
+        '.png': 'image/png',
+        '.json': 'application/json',
+        '.glb': 'model/gltf-binary',
+        '.fbx': 'application/octet-stream'
+    }.get(ext, 'application/octet-stream')
