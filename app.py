@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
 
+from common.scheduler_utils import trigger_scheduler
 from config import SERVER_IP, SERVER_PORT
 from logger import logger
 from pydantic import BaseModel
@@ -54,6 +55,9 @@ async def checkStatus():
     
 @app.post("/api/train-scene")
 async def train_scene():
+    global IS_BUSY
+    IS_BUSY = True
+
     base_dir_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     base_dir = os.path.join(os.getcwd(), 'data', base_dir_name)
     input_dir = f"{base_dir}/input"
@@ -69,21 +73,30 @@ async def train_scene():
     ##TODO: Cloud Storage로부터 받은 Video 불러오기 -> input_dir에 저장
     ##TODO: EX. /app/data/2024-02-17-06-22-39/video.mov
 
-    async with httpx.AsyncClient() as client:
-        # Preprocess 단계 호출
-        preprocess_response = await client.post(PREPROCESS_URL, json=base_dir_data)
-        if preprocess_response.status_code != 200:
-            raise HTTPException(status_code=preprocess_response.status_code, detail="Preprocess step failed")
+    try:
+        async with httpx.AsyncClient() as client:
+            # Preprocess 단계 호출
+            preprocess_response = await client.post(PREPROCESS_URL, json=base_dir_data)
+            if preprocess_response.status_code != 200:
+                raise HTTPException(status_code=preprocess_response.status_code, detail="Preprocess step failed")
 
-        # Train 단계 호출
-        mobilenerf_response = await client.post(MOBILENERF_URL, json=env_data)
-        if mobilenerf_response.status_code != 200:
-            raise HTTPException(status_code=mobilenerf_response.status_code, detail="Mobilenerf step failed")
+            # Train 단계 호출
+            mobilenerf_response = await client.post(MOBILENERF_URL, json=env_data)
+            if mobilenerf_response.status_code != 200:
+                raise HTTPException(status_code=mobilenerf_response.status_code, detail="Mobilenerf step failed")
 
-        # Postprocess 단계 호출
-        postprocess_response = await client.post(POSTPROCESS_URL, json=env_data)
-        if postprocess_response.status_code != 200:
-            raise HTTPException(status_code=postprocess_response.status_code, detail="Postprocess step failed")
+            # Postprocess 단계 호출
+            postprocess_response = await client.post(POSTPROCESS_URL, json=env_data)
+            if postprocess_response.status_code != 200:
+                raise HTTPException(status_code=postprocess_response.status_code, detail="Postprocess step failed")
+
+    except HTTPException as http_exc:
+        logger.error(f"Error during pipeline execution: {http_exc.detail}")
+        raise HTTPException(status_code=http_exc.status_code, detail=http_exc.detail)
+
+    finally:
+        IS_BUSY = False
+        trigger_scheduler()
 
     return {"message": "All stages completed successfully, files are ready in " + base_dir}
 
