@@ -38,8 +38,8 @@ POSTPROCESS_URL = f"http://{SERVER_IP}:{SERVER_PORT}/api/postprocess"
 
 ########## @@ APIHandler ##########
 
-@app.get("/api/status")
-async def checkStatus():
+@app.get("/")
+async def health_check():
     global IS_BUSY
     if IS_BUSY:
         return JSONResponse(
