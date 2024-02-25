@@ -2,8 +2,19 @@
 This repository implements the `Video2VR` pipeline, transforming user-input videos into 3D models compatible with WebXR viewer. Powered by NeRFStudio and MobileNeRF technologies.
 
 ## 🛠️ Architecture
+TODO: insert architecture image from drawio
 
 ## 🤖 Features
+
+Preprocessing
+We start by preprocessing input videos with NeRFStudio, setting the stage for a robust and efficient model training process.
+
+Training
+Utilizing MobileNeRF as the foundation, our model undergoes a two-stage training process. This optimized approach accommodates various types of scenes and avatars, each requiring distinct training methodologies to effectively derive the model.
+
+Postprocessing
+Following training, the model is postprocessed to ensure compatibility with WebXR Viewer, allowing for seamless visualization of the 3D models.
+
 
 ## 🙍‍♂️	User Guide
 
