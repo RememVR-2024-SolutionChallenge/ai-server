@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 
 import httpx
 from PIL import Image
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -61,16 +61,24 @@ async def health_check():
             content={"status": "IDLE"}
         )
     
-    
-@app.post("/api/train-scene/{doc_id}")
-async def train_scene(doc_id: str):
+@app.post("/api/train/{doc_id}", status_code=202)
+async def train_model(background_tasks: BackgroundTasks, doc_id: str):
     global IS_BUSY
+    if IS_BUSY:
+        raise HTTPException(status_code=400, detail="Server is currently busy. Please try again later.")
     IS_BUSY = True
 
     request_data = get_request(doc_id)
     if not request_data:
         IS_BUSY = False
         raise HTTPException(status_code=404, detail="Request data not found")
+
+    background_tasks.add_task(execute_training_pipeline, doc_id, request_data)
+
+
+async def execute_training_pipeline(doc_id: str, request_data: Dict):
+    global IS_BUSY
+    IS_BUSY = True
 
     groupId = request_data.get('groupId')
     title = request_data.get('title')
@@ -183,19 +191,32 @@ async def preprocess(data: Dict):
 @app.post("/api/mobilenerf")
 async def mobilenerf(data: Dict):
     env = data.get("env")
-    logger.info("Mobilenerf training started")
-    subprocess.run(['python', 'train.py'], env=env)
-    await asyncio.sleep(3)  # 3초 대기
-    logger.info("Mobilenerf training completed successfully.")
+    try:
+        logger.info("Mobilenerf training started")
+        result1 = subprocess.run(['python', './model/train_stage1.py'], env=env, check=True)
+        result2 = subprocess.run(['python', './model/train_stage2.py'], env=env, check=True)
+        logger.info("Mobilenerf training completed successfully.")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error during Mobilenerf training: {e}")
+        raise HTTPException(status_code=500, detail="Error occurred during Mobilenerf training.")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred during Mobilenerf training.")
     return {"message": "Mobilenerf training completed successfully."}
-
 
 @app.post("/api/postprocess")
 async def postprocess(data: Dict):
     base_dir = data.get("base_dir")
-    logger.info("Postprocessing started")
-    await asyncio.sleep(3)  # 3초 대기
-    logger.info("Postprocessing completed successfully.")
+    try:
+        logger.info("Postprocessing started")
+        result = subprocess.run(['python', './model/postprocess_entire.py'], env=env, check=True)
+        logger.info("Postprocessing completed successfully.")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error during postprocessing: {e}")
+        raise HTTPException(status_code=500, detail="Error occurred during postprocessing.")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Unexpected error occurred during postprocessing.")
     return {"message": "Postprocessing completed successfully."}
 
 
