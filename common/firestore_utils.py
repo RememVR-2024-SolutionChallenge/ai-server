@@ -1,54 +1,101 @@
 from google.cloud import firestore
-#from config import VR_RESOURCE_COLLECTION, REQUEST_COLLECTION
-VR_RESOURCE_COLLECTION = "vr_resource"
-REQUEST_COLLECTION = "3dgs_request"
+from google.oauth2 import service_account
 
-# Insert generated VR resource(avatar, scene) data,
-# when the task successfully finished.
-def insert_vr_resource(id: str, title: str, type:str, groupId: str, filePath: str):
-    data: dict = {
-        "id": id, # same as get_request
-        "title": title, # same as get_request
-        "type": type, # same as get_request
-        "groupId": groupId, # same as get_request
-        "filePath": filePath, # generated file's path
-        "createdAt": firestore.SERVER_TIMESTAMP
-    }
-    db = firestore.Client()
+KEY_PATH = "../gcp-service-account.json"
+credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
 
-    doc_ref = db.collection(VR_RESOURCE_COLLECTION).document(id)
-    doc_ref.set(data)
+def is_sample(id: str):
+    COLLECTION = "request_info"
+    data = firestore.Client(credentials=credentials).collection(COLLECTION).document(id).get().to_dict()
+    return data['isSample']
 
-    return {"doc_id": doc_ref.id}
+class VRData:
+    VR_RESOURCE_COLLECTION = "vr_resource"
+    REQUEST_COLLECTION = "3dgs_request"
 
-# Get request data,
-# when server starts the task.
-def get_request(doc_id: str):
-    db = firestore.Client()
+    def __init__(self):
+        self.db = firestore.Client(credentials=credentials)
 
-    doc_ref = db.collection(REQUEST_COLLECTION).document(doc_id)
-    doc = doc_ref.get()
+    def insert_vr_resource(self, id: str, title: str, type: str, groupId: str, filePath: str):
+        data = {
+            "id": id,
+            "title": title,
+            "type": type,
+            "groupId": groupId,
+            "filePath": filePath,
+            "createdAt": firestore.SERVER_TIMESTAMP
+        }
+        
+        doc_ref = self.db.collection(self.VR_RESOURCE_COLLECTION).document(id)
+        doc_ref.set(data)
 
-    return doc.to_dict()
+        return {"doc_id": doc_ref.id}
 
-# Update request's status,
-# when the task has finished.
-def update_request_status_completed(doc_id: str):
-    return update_request_status(doc_id, 'completed')
+    def get_request(self, doc_id: str):
+        doc_ref = self.db.collection(self.REQUEST_COLLECTION).document(doc_id)
+        doc = doc_ref.get()
 
-# when the task has failed.
-def update_request_status_failed(doc_id: str):
-    return update_request_status(doc_id, 'failed')
+        return doc.to_dict()
 
-# when the task has started.
-def update_request_status_processing(doc_id: str):
-    return update_request_status(doc_id, 'processing')
+    def update_request_status(self, doc_id: str, status: str):
+        if status not in ['pending', 'processing', 'completed', 'failed']:
+            raise ValueError("Invalid status. Must be 'pending', 'processing', 'completed', or 'failed'.")
+        
+        doc_ref = self.db.collection(self.REQUEST_COLLECTION).document(doc_id)
+        doc_ref.update({"status": status})
 
-# status must be in 'pending' | 'processing' | 'completed' | 'failed'.
-def update_request_status(doc_id: str, status: str):
-    db = firestore.Client()
+        return {"doc_id": doc_id, "status": status}
 
-    doc_ref = db.collection(REQUEST_COLLECTION).document(doc_id)
-    doc_ref.update({"status": status})
+    def update_request_status_completed(self, doc_id: str):
+        return self.update_request_status(doc_id, 'completed')
 
-    return {"doc_id": doc_id, "status": status}
+    def update_request_status_failed(self, doc_id: str):
+        return self.update_request_status(doc_id, 'failed')
+
+    def update_request_status_processing(self, doc_id: str):
+        return self.update_request_status(doc_id, 'processing')
+
+class SampleVRData:
+    VR_RESOURCE_COLLECTION = "sample_response"
+    REQUEST_COLLECTION = "sample_request"
+
+    def __init__(self):
+        self.db = firestore.Client(credentials=credentials)
+
+    def insert_vr_resource(self, id: str, title: str, type: str, filePath: str):
+        data = {
+            "id": id,
+            "title": title,
+            "type": type,
+            "filePath": filePath,
+            "createdAt": firestore.SERVER_TIMESTAMP
+        }
+        
+        doc_ref = self.db.collection(self.VR_RESOURCE_COLLECTION).document(id)
+        doc_ref.set(data)
+
+        return {"doc_id": doc_ref.id}
+
+    def get_request(self, doc_id: str):
+        doc_ref = self.db.collection(self.REQUEST_COLLECTION).document(doc_id)
+        doc = doc_ref.get()
+
+        return doc.to_dict()
+
+    def update_request_status(self, doc_id: str, status: str):
+        if status not in ['pending', 'processing', 'completed', 'failed']:
+            raise ValueError("Invalid status. Must be 'pending', 'processing', 'completed', or 'failed'.")
+        
+        doc_ref = self.db.collection(self.REQUEST_COLLECTION).document(doc_id)
+        doc_ref.update({"status": status})
+
+        return {"doc_id": doc_id, "status": status}
+
+    def update_request_status_completed(self, doc_id: str):
+        return self.update_request_status(doc_id, 'completed')
+
+    def update_request_status_failed(self, doc_id: str):
+        return self.update_request_status(doc_id, 'failed')
+
+    def update_request_status_processing(self, doc_id: str):
+        return self.update_request_status(doc_id, 'processing')
