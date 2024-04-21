@@ -1,14 +1,8 @@
-FROM dromni/nerfstudio:0.3.4
-RUN pip install "jax[cuda11_cudnn86]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-USER root
-RUN apt-get update && apt-get install -y 
-RUN apt-get install -y libgl1-mesa-dev
-RUN apt-get install -y libglib2.0-0
+FROM dromni/nerfstudio:1.0.3
 
 WORKDIR /app
-
 COPY ./requirements.txt /app/
+COPY . /app
 
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
