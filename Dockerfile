@@ -2,7 +2,9 @@ FROM dromni/nerfstudio:1.0.3
 
 WORKDIR /app
 COPY ./requirements.txt /app/
+COPY ./libs/pixel-perfect-sfm/pixsfm/features/extractor.py /home/user/pixel-perfect-sfm/pixsfm/features/extractor.py
 COPY . /app
+
 
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
