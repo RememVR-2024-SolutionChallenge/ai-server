@@ -15,16 +15,10 @@ import uvicorn
 
 from common.scheduler_utils import trigger_scheduler
 from common.storage_utils import download_from_storage, upload_to_storage
-from common.firestore_utils import (
-    get_request, 
-    update_request_status_completed, 
-    update_request_status_failed, 
-    update_request_status_processing,
-    insert_vr_resource
-)
+from common.firestore_utils import *
 
 from config import SERVER_IP, SERVER_PORT
-from logger import logger
+#from logger import logger
 from pydantic import BaseModel
 
 

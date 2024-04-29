@@ -1,9 +1,10 @@
 from google.cloud import storage
 from google.oauth2 import service_account
+from config import GOOGLE_APPLICATION_CREDENTIALS
 
 BUCKET = "3dgs-storage"
-KEY_PATH = "../gcp-service-account.json"
-credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
+#KEY_PATH = "..\..\gcp-service-account.json"
+credentials = service_account.Credentials.from_service_account_file(GOOGLE_APPLICATION_CREDENTIALS)
 
 # !!USAGE BELOW!!
 # file = download_from_storage("test/1.jpg")

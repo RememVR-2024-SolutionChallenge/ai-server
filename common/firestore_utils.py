@@ -1,8 +1,9 @@
 from google.cloud import firestore
 from google.oauth2 import service_account
+from config import GOOGLE_APPLICATION_CREDENTIALS
 
-KEY_PATH = "../gcp-service-account.json"
-credentials = service_account.Credentials.from_service_account_file(KEY_PATH)
+#KEY_PATH = "../gcp-service-account.json"
+credentials = service_account.Credentials.from_service_account_file(GOOGLE_APPLICATION_CREDENTIALS)
 
 def is_sample(id: str):
     COLLECTION = "request_info"
