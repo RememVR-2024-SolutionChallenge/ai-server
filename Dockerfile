@@ -1,5 +1,6 @@
-FROM dromni/nerfstudio:1.0.3
+FROM dromni/nerfstudio:1.0.2
 
+USER root
 WORKDIR /app
 COPY ./requirements.txt /app/
 COPY ./libs/pixel-perfect-sfm/pixsfm/features/extractor.py /home/user/pixel-perfect-sfm/pixsfm/features/extractor.py

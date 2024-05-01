@@ -1,5 +1,5 @@
-nerfstudio==1.0.3
-uvicorn==0.23.2
+nerfstudio==1.0.2
+uvicorn[standard]==0.23.2
 fastapi[all]==0.94.0
 python-dotenv==1.0.0
 httpx==0.24.1
