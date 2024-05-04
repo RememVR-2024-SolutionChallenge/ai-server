@@ -1,7 +1,11 @@
 import logging
 from config import LOG_PATH
+import os
 
 ########## @@ Logging ##########
+log_dir = os.path.dirname(LOG_PATH)
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
 
 logging.basicConfig(level=logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
